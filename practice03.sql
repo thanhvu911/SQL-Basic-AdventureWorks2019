@@ -33,16 +33,13 @@ Requirement: Calculate the total import cost for each month in 2012.
 Only include items imported for resale (not manufactured by the company).
 Data sources: Purchasing.PurchaseOrderHeader, Purchasing.PurchaseOrderDetail, Production.Product
 */
-SELECT * FROM Purchasing.PurchaseOrderHeader
-SELECT * FROM Purchasing.PurchaseOrderDetail
-SELECT * FROM Production.Product
 
 SELECT FORMAT(ppoh.OrderDate,'yyyy-MM') AS YearMonth,EOMONTH(ppoh.OrderDate) AS EndDateOfMonth,
-SUM(CASE WHEN pp.MakeFlag = 0 AND pp.FinishedGoodsFlag = 1 THEN LineTotal ELSE 0 END) AS PurchaseAmount
+SUM(LineTotal) AS PurchaseAmount
 FROM Purchasing.PurchaseOrderHeader ppoh
 JOIN Purchasing.PurchaseOrderDetail ppod ON ppoh.PurchaseOrderID = ppod.PurchaseOrderID
 JOIN Production.Product pp ON ppod.ProductID = pp.ProductID
-WHERE YEAR(ppoh.OrderDate) = 2012
+WHERE YEAR(ppoh.OrderDate) = 2012 AND pp.MakeFlag = 0 AND pp.FinishedGoodsFlag = 1
 GROUP BY FORMAT(ppoh.OrderDate,'yyyy-MM'), EOMONTH(ppoh.OrderDate)
 ORDER BY YearMonth, EndDateOfMonth
 
@@ -63,9 +60,9 @@ WITH RejectedRatio AS (
 SELECT *, 
 CASE 
 	WHEN RejectedRatio >= 0.05 THEN 'High return rate'
-	WHEN RejectedRatio < 0.05 AND RejectedRatio >= 0.02 THEN 'Medium return rate'
-	WHEN RejectedRatio < 0.02 AND RejectedRatio >= 0.005 THEN 'Low return rate'
-	ELSE 'Very low return rate'
+    WHEN RejectedRatio >= 0.02 THEN 'Medium return rate'
+    WHEN RejectedRatio >= 0.005 THEN 'Low return rate'
+    ELSE 'Very low return rate'
 END AS Class
 FROM RejectedRatio
 ORDER BY ProductID
@@ -114,7 +111,7 @@ Data sources: Purchasing.ProductVendor, Production.Product
 SELECT pv.ProductID, p.ProductNumber, p.Name AS ProductName, p.Color
 FROM Purchasing.ProductVendor pv
 LEFT JOIN Production.Product p ON pv.ProductID = p.ProductID
-WHERE LastReceiptDate < '2011-12-01' AND LastReceiptDate > DATEADD(MONTH,-6,'2011-12-01') 
+WHERE pv.LastReceiptDate >= DATEADD(MONTH,-6,'2011-12-01') AND p.FinishedGoodsFlag = 0
 GROUP BY pv.ProductID, p.ProductNumber, p.Name, p.Color
 HAVING COUNT(DISTINCT BusinessEntityID) >= 3
 ORDER BY ProductID
@@ -127,9 +124,6 @@ Data sources: Purchasing.ProductVendor, Production.Product
 Advanced: After getting the result, create a new column Note using STRING_AGG() and CONCAT() 
 to summarize data by ProductID.
 */
-SELECT * FROM Purchasing.Vendor
-SELECT * FROM Purchasing.ProductVendor
-SELECT * FROM Production.Product
 
 SELECT pv.ProductID, p.Name AS ProductName,pv.BusinessEntityID, v.Name AS VendorName, MinUnitCost
 FROM Purchasing.ProductVendor pv
@@ -138,7 +132,7 @@ JOIN (
     STRING_AGG(CONCAT('{v:', BusinessEntityID, ',c:', LastReceiptCost, '}'), ',') AS Note
     FROM Purchasing.ProductVendor pv
     JOIN Production.Product p ON pv.ProductID = p.ProductID
-    WHERE p.FinishedGoodsFlag = 0 
+    WHERE p.FinishedGoodsFlag = 0 AND pv.LastReceiptDate >= DATEADD(MONTH,-6,'2011-12-01')
     GROUP BY pv.ProductID
     HAVING COUNT(BusinessEntityID) >= 3
 ) pp ON pv.ProductID = pp.ProductID AND pv.LastReceiptCost = pp.MinUnitCost
